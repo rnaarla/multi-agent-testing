@@ -63,6 +63,10 @@ docker compose up -d                    # api, postgres, redis, worker, frontend
 
 curl http://localhost:8000/health       # verify backend is live
 open http://localhost:5173              # frontend (if enabled in compose profile)
+
+# (Optional) Seed demo data for the dashboard
+docker compose exec backend python -m app.scripts.seed_demo_data
+# Sign in with demo.admin@local / demo-password after seeding
 ```
 
 > **Tip:** Provide `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc. in `.env` to exercise real providers. Otherwise the system runs with deterministic mocks.
