@@ -2,3 +2,6 @@ __pycache__/
 *.pyc
 .env
 storage/
+.DS_Store
+DevPlaybook.md
+checklist.md
