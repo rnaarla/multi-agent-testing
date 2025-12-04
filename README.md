@@ -1,418 +1,198 @@
 # Multi-Agent Behavioral Testing Platform
 
-[![CI/CD Pipeline](https://github.com/YOUR_ORG/multi-agent-testing/actions/workflows/ci.yaml/badge.svg)](https://github.com/YOUR_ORG/multi-agent-testing/actions/workflows/ci.yaml)
+Multi-Agent Behavioral Testing Platform is an end-to-end lab for modelling, executing, monitoring, and governing complex AI workflows. The stack combines a FastAPI backend, structured observability, release guardrails, and collaboration tooling so engineering, QA, and compliance teams can operate at enterprise scale.
 
-An enterprise-grade framework for evaluating multi-agent systems through behavioral test graphs. The platform combines a Python-based execution engine, FastAPI service layer, React frontend, and PostgreSQL persistence to enable comprehensive testing, monitoring, and governance of AI agent workflows.
+---
 
-## 🚀 Features
+## ✨ Feature Highlights
 
-### Core Capabilities
-- **Behavioral Test Graphs**: Define agent workflows in YAML with nodes, edges, contracts, and assertions
-- **Deterministic Execution**: Seed-controlled runs with full replay capability
-- **Contract Validation**: Enforce input/output contracts between agent nodes
-- **Multi-Provider Support**: OpenAI, Anthropic, Azure OpenAI, Google Gemini, Ollama
-- **Async Execution**: Background workers with webhook notifications
+**Execution & Orchestration**
+- Behavioral graphs with contracts, assertions, deterministic replay, and chaos modes.
+- Multi-cloud/provider routing (`openai`, `anthropic`, `azure`, `mock`) with regional fallbacks.
+- Sync + async runs, WebSocket log streaming, and historical diffing.
 
-### Governance & Safety
-- **PII Detection**: Automatic detection and redaction of sensitive data
-- **Policy Engine**: Rule-based content filtering and compliance checks
-- **Safety Scoring**: Comprehensive safety assessment for agent outputs
-- **Audit Logging**: Full traceability of all operations
-- **SSO & Tenant Isolation**: Enforce per-tenant RBAC with OIDC SSO and tamper-evident audit trails
+**Governance & Reliability**
+- PII/safety middleware, tenant-aware RBAC, immutable audit trails.
+- Release guard evaluation (`/release/guard`) with SLO/error-budget checks and promotion CLI.
+- Simulation mode & QA run controls (pause/resume/stop/replay) with timeline/compliance views.
 
-### Observability
-- **Metrics Dashboard**: Latency tracking, cost accounting, pass rates
-- **Drift Detection**: Automatic detection of behavioral regression
-- **Execution Traces**: Full visibility into agent execution steps
+**Observability & Analytics**
+- OpenTelemetry tracing, structured request logs, Prometheus metrics & alert catalog.
+- Analytics endpoints for anomaly detection, drift, cost/latency trends, worker health dashboards.
 
-## 📋 Prerequisites
+**Collaboration & DevEx**
+- Slack webhook integration for run outcomes.
+- Docker dev container, mock providers, load/contract fuzzing harnesses, OpenAPI snapshot tooling.
+- CI gating (lint/type/tests/coverage) and infra-as-code scaffolding (Terraform backend module, promotion pipeline).
 
-- Docker & Docker Compose
-- Node.js 20+ (for local frontend development)
-- Python 3.11+ (for local backend development)
+---
 
-## 🛠️ Quick Start
+## 📦 Repository Layout
 
-### Using Docker Compose
+| Path | Purpose |
+| ---- | ------- |
+| `backend/src/app` | FastAPI application, services, runner, observability, reliability toolkits |
+| `backend/tests` | Unit + integration suites (≥94% coverage) |
+| `frontend/` | React workbench (execution studio dashboards, WIP) |
+| `deploy/` | Deployment assets (multi-stage Dockerfile, promotion workflow, SLO catalog) |
+| `iac/terraform/` | Terraform module + root example for managed deployments |
+| `scripts/` | Devcontainer builder, release promotion CLI |
+| `docker-compose.yaml` | Local stack (API, workers, frontend, supporting services) |
+| `DevPlaybook.md` | Engineering playbook / CI-CD guidance |
+| `checklist.md` | Enterprise readiness checklist |
+
+---
+
+## ⚡ Quick Start
+
+### Option 1 – Docker Compose
 
 ```bash
-# Clone the repository
-git clone https://github.com/YOUR_ORG/multi-agent-testing.git
+git clone https://github.com/<your-org>/multi-agent-testing.git
 cd multi-agent-testing
 
-# Create environment file
-cat > .env << EOF
+# Create a minimal environment file
+cat <<EOF > .env
+DATABASE_URL=postgresql://postgres:postgres@postgres:5432/postgres
+REDIS_URL=redis://redis:6379/0
 JWT_SECRET=$(openssl rand -hex 32)
-OPENAI_API_KEY=your-key-here
-ANTHROPIC_API_KEY=your-key-here
+OPENAI_API_KEY=sk-placeholder
+ANTHROPIC_API_KEY=anthropic-placeholder
 EOF
+docker compose up -d                    # api, postgres, redis, worker, frontend
 
-# Start all services
-docker compose up -d
-
-# Check health
-curl http://localhost:8000/health
+curl http://localhost:8000/health       # verify backend is live
+open http://localhost:5173              # frontend (if enabled in compose profile)
 ```
 
-The services will be available at:
-- **API**: http://localhost:8000
-- **API Docs**: http://localhost:8000/docs
-- **Frontend**: http://localhost:5173
-- **Flower (Celery UI)**: http://localhost:5555 (use `--profile monitoring`)
+> **Tip:** Provide `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc. in `.env` to exercise real providers. Otherwise the system runs with deterministic mocks.
 
-### Local Development
+### Option 2 – Local Development
 
 ```bash
 # Backend
 cd backend
-python -m venv venv
-source venv/bin/activate
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
-cd src && uvicorn app.main:app --reload
+uvicorn app.main:app --reload           # http://localhost:8000/docs
 
-# Frontend
-cd frontend
+# Frontend (optional prototype studio)
+cd ../frontend
 npm install
-npm run dev
+npm run dev                             # http://localhost:5173
 ```
 
-## 📖 Usage
-
-### Define a Test Graph
-
-Create a YAML file defining your agent workflow:
-
-```yaml
-# test-graph.yaml
-id: customer-support-flow
-name: Customer Support Agent Test
-
-nodes:
-  - id: intent-classifier
-    type: classifier
-    config:
-
-### Run Lifecycle Controls
+### Optional Tooling
 
 ```bash
-# Cancel a queued or running execution
-curl -X POST http://localhost:8000/runs/42/cancel
+# Generate OpenAPI schema snapshot (fails CI if drift detected)
+cd backend && python scripts/generate_openapi.py
 
-# Deterministically replay a historical run (optionally overriding config)
-      provider: openai
-  -H "Content-Type: application/json" \
-  -d '{"provider":"openai","model":"gpt-4o-mini"}'
+# Promote a release after guard evaluation
+python scripts/promote_release.py --release-id v1.2 --environment staging
 ```
 
-Background jobs automatically detect orphaned or long-running executions,
-requeue safe workloads, and mark stale runs as failed so you can replay them
-with guaranteed version pinning and artifact recovery.
-      model: gpt-4o-mini
-      system_prompt: "Classify customer intent"
+---
 
-  - id: response-generator
-    type: responder
-    config:
-      provider: anthropic
-      model: claude-3-haiku-20240307
-    inputs: [intent-classifier]
+## ⚙️ Configuration
 
-edges:
-  - from: intent-classifier
-    to: response-generator
+Key environment variables (all supported via `.env`, Compose, or Terraform):
 
-contracts:
-  - id: intent-output
-    source: intent-classifier
-    required_fields: [intent, confidence]
-    types:
-      intent: string
-      confidence: float
-    constraints:
-      confidence:
-        min: 0
-        max: 1
+| Variable | Description |
+| -------- | ----------- |
+| `DATABASE_URL`, `REDIS_URL` | Backing stores for API and Celery |
+| `JWT_SECRET` | Signing secret for auth tokens |
+| `SECRET_BACKEND` | `env`, `aws`, `gcp`, or `vault` secret manager selection |
+| `OTEL_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_SAMPLING_RATIO` | OpenTelemetry tracing |
+| `PROMETHEUS_MULTIPROC_DIR` | Enable Prometheus multiprocess metrics if using Gunicorn/Uvicorn workers |
+| `RELEASE_GUARD_ENVIRONMENT` | Injectable deployment target for `/release/guard` checks |
+| `SLACK_WEBHOOK_URL` | Enable Slack notifications through `/collab/slack/notify` |
+| `OIDC_PROVIDER_CONFIG` / `_FILE` | JSON describing OIDC providers and tenant mappings |
+| `GOVERNANCE_ENABLED`, `GOVERNANCE_DEFAULT_MIN_SCORE` | Baseline safety enforcement |
+| `DEFAULT_PROVIDER_STRATEGY` | Controls provider registry fallback strategy |
 
-assertions:
-  - id: high-confidence
-    type: greater_than
-    target: intent-classifier
-    field: confidence
-    expected: 0.8
+See `backend/src/app/config.py` and `deploy/slos.yaml` for exhaustive knobs.
 
-  - id: response-quality
-    type: semantic_similarity
-    target: response-generator
-    field: response
-    expected: "helpful customer response"
-    config:
-      threshold: 0.7
+---
 
-  - id: latency-check
-    type: latency_under
-    target: response-generator
-    expected: 5000
-```
+## 🧭 Workflow Guide
 
-### Upload and Execute
+1. **Author Graphs** – Upload YAML via `/graphs/upload`, or build programmatically using `/graphs/builder/generate`.
+2. **Execute Runs** – Fire synchronous `/runs/{graph_id}/execute` or async `/runs/{graph_id}/execute/async`. Stream live logs via `/runs/stream/{run_id}`.
+3. **Compare Outcomes** – Diff historical executions with `/runs/{run_id}/diff/{other_id}`.
+4. **QA & Replay** – Use `/user-testing/runs/history`, `/timeline`, `/assertions`, `/compliance`, and `/replay` to review behaviour. Apply control actions (`pause/resume/stop/replay`) with `/user-testing/runs/{id}/control`.
+5. **Monitor** – Scrape metrics at `/metrics/prometheus`; query analytics endpoints `/analytics/anomalies/latency` and `/analytics/anomalies/series` for drift.
+6. **Release Safely** – Call `/release/guard` or run `scripts/promote_release.py` to enforce SLO/error-budget policies before promotion.
+7. **Alert & Collaborate** – Configure `SLACK_WEBHOOK_URL` and hit `/collab/slack/notify` for engineering broadcast.
+
+---
+
+## 🔍 Testing & Quality Gates
 
 ```bash
-# Upload graph
-curl -X POST http://localhost:8000/graphs/upload \
-  -F "file=@test-graph.yaml"
-
-# Execute graph
-curl -X POST http://localhost:8000/runs/1/execute
-
-# Check results
-curl http://localhost:8000/runs/1
-
-# Get metrics
-curl http://localhost:8000/metrics/summary
-```
-
-### Async Execution with Webhooks
-
-```bash
-curl -X POST http://localhost:8000/runs/1/execute/async \
-  -H "Content-Type: application/json" \
-  -d '{
-    "provider": "openai",
-    "model": "gpt-4o-mini",
-    "webhook_url": "https://your-webhook.com/callback"
-  }'
-```
-
-## 🏗️ Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        Frontend (React)                          │
-│                     http://localhost:5173                        │
-└─────────────────────────────────────────────────────────────────┘
-                                │
-                                ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                     Backend API (FastAPI)                        │
-│                     http://localhost:8000                        │
-├─────────────────────────────────────────────────────────────────┤
-│  /graphs     - Test graph management                             │
-│  /runs       - Test execution                                    │
-│  /metrics    - Analytics & drift detection                       │
-│  /auth       - Authentication & RBAC                             │
-└─────────────────────────────────────────────────────────────────┘
-        │                    │                    │
-        ▼                    ▼                    ▼
-┌──────────────┐    ┌──────────────┐    ┌──────────────┐
-│   Runner     │    │   Workers    │    │  Providers   │
-│   Engine     │    │   (Celery)   │    │   Registry   │
-├──────────────┤    ├──────────────┤    ├──────────────┤
-│ - Assertions │    │ - Async exec │    │ - OpenAI     │
-│ - Contracts  │    │ - Webhooks   │    │ - Anthropic  │
-│ - State      │    │ - Scheduling │    │ - Azure      │
-│   Machine    │    │              │    │ - Ollama     │
-└──────────────┘    └──────────────┘    └──────────────┘
-        │                    │                    
-        ▼                    ▼                    
-┌─────────────────────────────────────────────────────────────────┐
-│                         Data Layer                               │
-├────────────────────────────┬────────────────────────────────────┤
-│     PostgreSQL             │           Redis                     │
-│     (Persistence)          │           (Job Queue)               │
-└────────────────────────────┴────────────────────────────────────┘
-```
-
-## 🧪 Testing
-
-```bash
-# Run backend tests
 cd backend
-pytest app/ -v --cov=app
+pytest --cov=app                       # complete suite (targets ≥89% coverage, currently ~95%)
+pytest -m "not load"                   # skip long-running load tests
+pytest tests/test_user_testing_router.py::test_replay_endpoint  # focused smoke
 
-# Run frontend tests
-cd frontend
-npm test
-
-# Run integration tests
-docker compose up -d
-./scripts/integration-tests.sh
+# Load / soak harness (opt-in)
+pytest -m load tests/test_load_harness.py
 ```
 
-## 📊 API Reference
+- OpenAPI drift is caught by `tests/test_openapi_schema.py` – run `python scripts/generate_openapi.py` if you intentionally change the API surface.
+- CI gating (`.github/workflows/ci.yaml`) enforces lint, type check, unit/integration tests, and coverage thresholds.
+- DevContainer (`.devcontainer/`) ensures reproducible VS Code / Codespaces environments.
 
-### Graphs
+---
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/graphs` | GET | List all graphs |
-| `/graphs` | POST | Create graph from JSON |
-| `/graphs/upload` | POST | Upload YAML graph |
-| `/graphs/{id}` | GET | Get graph details |
-| `/graphs/{id}` | PUT | Update graph |
-| `/graphs/{id}` | DELETE | Delete graph |
-| `/graphs/{id}/validate` | GET | Validate graph structure |
-| `/graphs/{id}/export` | GET | Export graph (yaml/json/mermaid) |
+## 🚀 Deployment & Operations
 
-### Runs
+- **Docker**: `deploy/backend.Dockerfile` is a multi-stage build hardened for production. Pair with `docker-compose.yaml` for local orchestration or a minimal staging footprint.
+- **Terraform**: `iac/terraform/` contains a root example plus reusable module wiring VPC, Postgres, Redis, ECS/Kubernetes inputs, and observability sinks.
+- **Promotion Pipeline**: `deploy/promotion.yaml` describes a canary/blue-green promotion workflow driven by release guard status, artifact provenance, and rollback triggers.
+- **SLOs & Alerts**: `deploy/slos.yaml` enumerates service SLOs; `backend/src/app/observability/alerts.py` exports Prometheus alert definitions with links to runbooks in `backend/docs/runbooks.md`.
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/runs` | GET | List all runs |
-| `/runs/{graph_id}/execute` | POST | Execute graph sync |
-| `/runs/{graph_id}/execute/async` | POST | Execute graph async |
-| `/runs/{id}` | GET | Get run details |
-| `/runs/{id}/trace` | GET | Get execution trace |
+Enable OTEL exporters and Prometheus scraping in your runtime to populate Grafana/Alertmanager dashboards. Release guard integrates those metrics to veto risky promotions.
 
-### Metrics
+---
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/metrics/summary` | GET | Overall metrics |
-| `/metrics/by-graph/{id}` | GET | Graph-specific metrics |
-| `/metrics/trends` | GET | Metrics over time |
-| `/metrics/drift` | GET | Drift detection |
+## 🔐 Security & Compliance Notes
 
-## 🔐 Security
+- Tenant-scoped RBAC (Admin, Operator, Viewer, API) with OIDC SSO onboarding.
+- Secrets resolved dynamically via environment, AWS/GCP Secret Manager, or Vault.
+- Audit log retains tamper-evident hashes (chain-of-custody) and is parameterized by tenant.
+- Governance middleware sanitises inputs/outputs, enforces minimum safety scores, and blocks policy violations when configured.
 
-### Authentication
+---
 
-The platform supports JWT tokens and API keys:
+## 🗺 Roadmap Snapshot
 
-```bash
-# Login
-curl -X POST http://localhost:8000/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"admin@example.com","password":"secret"}'
+- [x] Multi-tenant support with OIDC, release guardrails, analytics, QA interface.
+- [ ] Production-ready React execution studio (drag-and-drop builder, live inspector).
+- [ ] TimescaleDB-backed long-term metrics + anomaly fingerprinting.
+- [ ] Managed Helm chart & GitOps pipeline.
+- [ ] Expanded collaboration suite (notebook authoring, artifact annotations).
 
-# Use token
-curl http://localhost:8000/graphs \
-  -H "Authorization: Bearer <token>"
+See `checklist.md` for the full enterprise-readiness tracker.
 
-# Or use API key
-curl http://localhost:8000/graphs \
-  -H "X-API-Key: mat_xxxxx"
-```
-
-### Roles
-
-| Role | Permissions |
-|------|-------------|
-| `admin` | Full access |
-| `operator` | Create/run tests, view all |
-| `viewer` | Read-only access |
-| `api` | Programmatic access |
-
-### SSO & Tenant Isolation
-
-- **OIDC Login**: Configure one or more OpenID Connect providers by setting `OIDC_PROVIDER_CONFIG` or pointing `OIDC_PROVIDER_CONFIG_FILE` at a JSON document. Each provider maps OIDC claims to a local tenant and role.
-- **Tenant-Aware APIs**: All `/graphs`, `/runs`, and `/metrics` routes automatically scope queries to the authenticated tenant. Cross-tenant access attempts return 404 responses.
-- **Audit Trails**: Audit log entries store the tenant identifier so compliance teams can export per-tenant activity with integrity guarantees.
-
-Example provider configuration:
-
-```json
-{
-  "okta": {
-    "issuer": "https://your-domain.okta.com/oauth2/default",
-    "client_id": "OKTA_CLIENT_ID",
-    "client_secret": "OKTA_CLIENT_SECRET",
-    "redirect_uri": "https://app.example.com/oidc/callback",
-    "scopes": ["openid", "profile", "email", "groups"],
-    "tenant_claim": "tid",
-    "role_claim": "groups",
-    "default_role": "viewer",
-    "default_tenant": "default"
-  }
-}
-```
-
-Set `tenant_claim` to the claim containing your directory/tenant identifier and `role_claim` to the claim that carries authorization groups. The backend automatically provisions users on first login, pins them to the resolved tenant, and issues JWTs that downstream services can validate.
-
-## 🚢 Deployment
-
-### Kubernetes
-
-```bash
-# Apply Kubernetes manifests
-kubectl apply -f k8s/
-
-# Or use Helm
-helm install agent-testing ./helm/agent-testing
-```
-
-### Environment Variables
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `DATABASE_URL` | PostgreSQL connection | Required |
-| `REDIS_URL` | Redis connection | Required |
-| `JWT_SECRET` | JWT signing key | Required |
-| `OPENAI_API_KEY` | OpenAI API key | Optional |
-| `ANTHROPIC_API_KEY` | Anthropic API key | Optional |
-| `CORS_ORIGINS` | Allowed origins | `*` |
-| `ARTIFACTS_S3_BUCKET` | (Optional) bucket for execution artifacts | Local disk |
-| `ARTIFACTS_S3_PREFIX` | S3 key prefix for artifacts | `artifacts/` |
-| `ARTIFACT_STORAGE_DIR` | Local artifact path when no bucket set | `storage/artifacts` |
-| `CELERY_AUTOSCALE_MIN` | Minimum Celery worker pool size | `4` |
-| `CELERY_AUTOSCALE_MAX` | Maximum Celery worker pool size | `16` |
-| `CELERY_MAX_TASKS_PER_CHILD` | Worker recycling threshold | `100` |
-| `SECRET_BACKEND` | Secrets backend (`env`, `aws`, `gcp`, `vault`) | `env` |
-| `SECRET_CACHE_TTL_SECONDS` | Seconds to cache resolved secrets | `300` |
-| `AUDIT_LOG_RETENTION_DAYS` | Retention policy for immutable audit logs | `365` |
-| `GOVERNANCE_ENABLED` | Toggle PII/safety middleware by default | `true` |
-| `GOVERNANCE_DEFAULT_MIN_SCORE` | Minimum safety score before blocking output | `0.3` |
-| `GOVERNANCE_BLOCK_POLICY_VIOLATIONS` | Block critical policy violations automatically | `false` |
-| `OIDC_PROVIDER_CONFIG` | JSON string describing one or more OIDC providers (see example above) | unset |
-| `OIDC_PROVIDER_CONFIG_FILE` | Path to JSON file with OIDC provider configs (alternative to env string) | unset |
-
-> **Secrets**: set `SECRET_BACKEND=aws`, `gcp`, or `vault` plus the respective
-> credentials (`AWS_REGION`, `GCP_PROJECT`, `VAULT_ADDR`, `VAULT_TOKEN`) to have
-> API keys and JWT secrets resolved dynamically. Install
-> `google-cloud-secret-manager` for GCP or `hvac` for Vault when using those
-> providers.
-
-> **Governance**: execution requests can override `tenant_id` and
-> `governance={...}` in the run config to dial policies per tenant while the
-> defaults above ensure MAANG-grade guardrails are always active.
-
-#### Horizontal Worker Scaling
-
-- Workers start with Celery autoscaling enabled (configure via the env vars
-  above). Locally you can scale concurrent containers with
-  `docker compose up --scale worker=4` to test burst capacity.
-
-#### Artifact Snapshotting
-
-- Every execution trace is persisted in PostgreSQL **and** exported as JSON
-  artifacts. Point the platform at an S3 bucket via `ARTIFACTS_S3_BUCKET` or
-  keep the defaults to write under `storage/artifacts/` for local audits.
-
-## 📈 Roadmap
-
-- [ ] Interactive graph editor (drag & drop)
-- [ ] TimescaleDB for metrics time-series
-- [ ] S3/GCS for log storage
-- [ ] Kubernetes Helm chart
-- [ ] OpenTelemetry tracing
-- [ ] GraphQL API
-- [x] Multi-tenant support (OIDC SSO + tenant isolation)
+---
 
 ## 🤝 Contributing
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing`)
-3. Commit changes (`git commit -m 'Add amazing feature'`)
-4. Push to branch (`git push origin feature/amazing`)
-5. Open a Pull Request
+1. Fork the repository and create a feature branch (`git checkout -b feature/my-feature`).
+2. Keep tests green (`pytest --cov=app`) and update documentation/OpenAPI snapshots when behaviour changes.
+3. Ensure lint/type gates pass before opening a PR.
+4. Submit the PR; CI enforces coverage and quality gates automatically.
+
+---
 
 ## 📄 License
 
-MIT License - see [LICENSE](LICENSE) for details.
+MIT License – see [LICENSE](LICENSE) for details.
 
-## 🙏 Acknowledgments
+---
 
-Built with:
-- [FastAPI](https://fastapi.tiangolo.com/)
-- [React](https://react.dev/)
-- [Celery](https://docs.celeryq.dev/)
-- [PostgreSQL](https://www.postgresql.org/)
+## 🙌 Acknowledgements
+
+Built with FastAPI, Pydantic, Celery, SQLAlchemy, Prometheus, OpenTelemetry, React, Vite, and a stack of engineering patterns inspired by large-scale AI testing programs.
