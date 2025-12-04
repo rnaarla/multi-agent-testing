@@ -1,0 +1,245 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  PYTHON_VERSION: "3.11"
+  NODE_VERSION: "20"
+
+jobs:
+  # ============================================================================
+  # Backend Tests
+  # ============================================================================
+  backend-test:
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: agent_tests_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+      
+      - name: Install dependencies
+        run: |
+          cd backend
+          pip install -r requirements.txt
+      
+      - name: Lint with Ruff
+        run: |
+          cd backend
+          pip install ruff
+          ruff check app/
+      
+      - name: Type check with MyPy
+        run: |
+          cd backend
+          pip install mypy
+          mypy app/ --ignore-missing-imports || true
+      
+      - name: Run tests
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/agent_tests_test
+          REDIS_URL: redis://localhost:6379/0
+          JWT_SECRET: test-secret-key
+        run: |
+          cd backend
+          pytest app/ -v --cov=app --cov-report=xml
+      
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          file: backend/coverage.xml
+          flags: backend
+
+  # ============================================================================
+  # Frontend Tests
+  # ============================================================================
+  frontend-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      
+      - name: Install dependencies
+        run: |
+          cd frontend
+          npm ci || npm install
+      
+      - name: Lint
+        run: |
+          cd frontend
+          npm run lint || true
+      
+      - name: Build
+        run: |
+          cd frontend
+          npm run build
+      
+      - name: Test
+        run: |
+          cd frontend
+          npm test || true
+
+  # ============================================================================
+  # Integration Tests
+  # ============================================================================
+  integration-test:
+    runs-on: ubuntu-latest
+    needs: [backend-test, frontend-test]
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Docker Compose
+        run: |
+          docker compose version
+      
+      - name: Build containers
+        run: |
+          docker compose build
+      
+      - name: Start services
+        run: |
+          docker compose up -d db redis backend
+          sleep 10
+      
+      - name: Health check
+        run: |
+          curl -f http://localhost:8000/health || exit 1
+      
+      - name: Run integration tests
+        run: |
+          # Test graph upload
+          curl -X POST http://localhost:8000/graphs \
+            -H "Content-Type: application/json" \
+            -d '{"name":"test-graph","content":{"nodes":[{"id":"n1","type":"mock"}],"edges":[]}}' \
+            || exit 1
+          
+          # Test list graphs
+          curl -f http://localhost:8000/graphs || exit 1
+          
+          # Test metrics endpoint
+          curl -f http://localhost:8000/metrics/summary || exit 1
+      
+      - name: Cleanup
+        if: always()
+        run: docker compose down -v
+
+  # ============================================================================
+  # Security Scan
+  # ============================================================================
+  security-scan:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+      
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  # ============================================================================
+  # Build and Push Docker Images
+  # ============================================================================
+  build-images:
+    runs-on: ubuntu-latest
+    needs: [integration-test]
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Build and push backend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: true
+          tags: ghcr.io/${{ github.repository }}/backend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      
+      - name: Build and push frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          push: true
+          tags: ghcr.io/${{ github.repository }}/frontend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ============================================================================
+  # Deploy (Example - customize for your infrastructure)
+  # ============================================================================
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [build-images]
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Deploy to production
+        run: |
+          echo "Deployment would happen here"
+          # kubectl apply -f k8s/
+          # or
+          # docker compose -f docker-compose.prod.yaml up -d

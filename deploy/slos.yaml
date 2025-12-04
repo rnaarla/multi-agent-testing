@@ -1,0 +1,16 @@
+slos:
+  - name: default
+    latency_ms_p95: 900
+    latency_ms_p99: 1500
+    availability:
+      target: 0.99
+      window_days: 30
+    notes: "Baseline API target for multi-agent orchestration endpoints."
+  - name: async-workers
+    latency_ms_p95: 1200
+    latency_ms_p99: 2000
+    availability:
+      target: 0.985
+      window_days: 30
+    notes: "Background worker execution SLO used for canary evaluation."
+

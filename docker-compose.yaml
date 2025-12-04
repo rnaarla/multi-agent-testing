@@ -1,0 +1,157 @@
+version: "3.9"
+
+services:
+  # ============================================================================
+  # Backend API Service
+  # ============================================================================
+  backend:
+    build: ./backend
+    container_name: agent-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/agent_tests
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
+      - CORS_ORIGINS=http://localhost:5173,http://localhost:3000
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY:-}
+      - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT:-}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - ./backend/src:/app
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # ============================================================================
+  # Celery Worker for Background Tasks
+  # ============================================================================
+  worker:
+    build: ./backend
+    container_name: agent-worker
+    command: >-
+      sh -c "celery -A workers.tasks worker --loglevel=info
+      --autoscale=${CELERY_AUTOSCALE_MAX:-16},${CELERY_AUTOSCALE_MIN:-4}
+      --max-tasks-per-child=${CELERY_MAX_TASKS_PER_CHILD:-100}
+      -Q graph_execution,notifications"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/agent_tests
+      - REDIS_URL=redis://redis:6379/0
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - CELERY_AUTOSCALE_MAX=${CELERY_AUTOSCALE_MAX:-16}
+      - CELERY_AUTOSCALE_MIN=${CELERY_AUTOSCALE_MIN:-4}
+      - CELERY_MAX_TASKS_PER_CHILD=${CELERY_MAX_TASKS_PER_CHILD:-100}
+    depends_on:
+      - backend
+      - redis
+    volumes:
+      - ./backend/src:/app
+    restart: unless-stopped
+
+  # ============================================================================
+  # Celery Beat Scheduler
+  # ============================================================================
+  scheduler:
+    build: ./backend
+    container_name: agent-scheduler
+    command: celery -A workers.tasks beat --loglevel=info
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/agent_tests
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - worker
+      - redis
+    volumes:
+      - ./backend/src:/app
+    restart: unless-stopped
+
+  # ============================================================================
+  # Frontend UI
+  # ============================================================================
+  frontend:
+    build: ./frontend
+    container_name: agent-frontend
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend/src:/app/src
+    restart: unless-stopped
+
+  # ============================================================================
+  # PostgreSQL Database
+  # ============================================================================
+  db:
+    image: postgres:15
+    container_name: agent-db
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: agent_tests
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ============================================================================
+  # Redis for Job Queue and Caching
+  # ============================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: agent-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ============================================================================
+  # Flower - Celery Monitoring (Development)
+  # ============================================================================
+  flower:
+    build: ./backend
+    container_name: agent-flower
+    command: celery -A workers.tasks flower --port=5555
+    ports:
+      - "5555:5555"
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - worker
+      - redis
+    profiles:
+      - monitoring
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  default:
+    name: agent-testing-network

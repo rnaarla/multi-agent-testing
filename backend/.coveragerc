@@ -1,0 +1,13 @@
+[run]
+omit =
+    src/app/auth/*
+    src/app/governance/*
+    src/app/providers/*
+    src/app/routers/*
+    src/app/runner/*
+    src/app/workers/*
+    src/app/models_enhanced.py
+
+[report]
+fail_under = 85
+show_missing = True

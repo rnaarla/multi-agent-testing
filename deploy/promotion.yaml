@@ -1,0 +1,23 @@
+apiVersion: rigging/v1
+kind: PromotionPipeline
+metadata:
+  name: backend-promotion
+spec:
+  stages:
+    - name: build
+      steps:
+        - run: docker build -f deploy/backend.Dockerfile -t backend:${GIT_SHA} .
+        - run: docker push backend:${GIT_SHA}
+    - name: verify
+      steps:
+        - run: pytest --cov=app
+        - run: python backend/scripts/promote_release.py --verify
+    - name: canary
+      steps:
+        - run: terraform -chdir=iac/terraform apply -target=module.backend_canary
+        - run: python backend/scripts/promote_release.py --canary-check
+    - name: promote
+      steps:
+        - run: terraform -chdir=iac/terraform apply
+        - run: python backend/scripts/promote_release.py --promote
+
