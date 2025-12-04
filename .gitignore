@@ -5,3 +5,7 @@ storage/
 .DS_Store
 DevPlaybook.md
 checklist.md
+*.coverage
+.pytest_cache/
+node_modules/
+backend/src/celerybeat-schedule

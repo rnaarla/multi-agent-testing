@@ -28,7 +28,7 @@ celery_app = Celery(
     "agent_testing",
     broker=REDIS_URL,
     backend=REDIS_URL,
-    include=["workers.tasks"]
+    include=["app.workers.tasks"]
 )
 
 # Celery configuration
@@ -49,14 +49,14 @@ celery_app.conf.update(
 
 # Task routing
 celery_app.conf.task_routes = {
-    "workers.tasks.execute_graph_async": {"queue": "graph_execution"},
-    "workers.tasks.send_webhook": {"queue": "notifications"},
+    "app.workers.tasks.execute_graph_async": {"queue": "graph_execution"},
+    "app.workers.tasks.send_webhook": {"queue": "notifications"},
 }
 
 # Track cancellation requests via Redis keys
 _CANCEL_KEY_PREFIX = "cancelled_run:"
 logger = structlog.get_logger(__name__)
-tracer = get_tracer("workers.tasks")
+tracer = get_tracer("app.workers.tasks")
 
 
 def _mark_cancelled(run_id: str) -> None:

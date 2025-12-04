@@ -34,7 +34,15 @@ class SLOConfig:
 
 
 def _default_slo_path() -> Path:
-    return Path(__file__).resolve().parents[4] / "deploy" / "slos.yaml"
+    """Best-effort attempt to locate the default SLO catalog."""
+
+    current = Path(__file__).resolve()
+    for parent in current.parents:
+        candidate = parent / "deploy" / "slos.yaml"
+        if candidate.exists():
+            return candidate
+    # Fall back to sibling lookup so callers can detect missing file cleanly.
+    return current.parent / "slos.yaml"
 
 
 def load_default_slos(path: Path | None = None) -> List[SLOConfig]:
