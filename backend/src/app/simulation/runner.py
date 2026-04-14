@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Type
+from typing import Any, Dict, List, Optional, Sequence
 
 from app.database import SessionLocal
 from app.providers import ProviderRegistry, ProviderConfig, provider_registry
@@ -13,8 +13,6 @@ from app.providers.router import ProviderRouter
 from .agents import (
     AgentBase,
     AgentContext,
-    AgentObservation,
-    AgentAction,
     AgentMessage,
     RuleBasedAgent,
     LLMAgent,

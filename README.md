@@ -2,6 +2,17 @@
 
 Multi-Agent Behavioral Testing Platform is an end-to-end lab for modelling, executing, monitoring, and governing complex AI workflows. The stack combines a FastAPI backend, structured observability, release guardrails, and collaboration tooling so engineering, QA, and compliance teams can operate at enterprise scale.
 
+### Shipped in this repository (vs roadmap)
+
+| Shipped (verified in CI / code) | Roadmap / aspirational (see also `checklist.md`) |
+| ------------------------------- | ------------------------------------------------ |
+| FastAPI backend with graphs, runs, metrics, user-testing, **simulation** (`/simulation/*`), **post-run `/simulation/runs/{id}/evaluate`**, auth (JWT / API key), RBAC | “Sync + async runs” and WebSocket streaming as **first-class** everywhere—verify per route before relying on it |
+| React dashboard: graphs, runs, analytics, **simulation tab** (demo + preset checks) | Drag-and-drop graph builder, full execution studio |
+| Docker Compose local stack; `pytest` on `tests/`; OpenAPI snapshot in `docs/openapi-schema.json` | Full GitOps / managed Helm as defaults |
+| CI: backend tests + coverage floor, **critical-path Ruff + mypy**, frontend **lint + build** | Repo-wide strict mypy, performance budgets in CI |
+
+Some bullets under **Feature Highlights** below describe **intended** capabilities; treat the table above as the honesty boundary for what this README guarantees.
+
 ---
 
 ## ✨ Feature Highlights
@@ -150,7 +161,7 @@ See `backend/src/app/config.py` and `deploy/slos.yaml` for exhaustive knobs.
 
 ```bash
 cd backend
-pytest --cov=app                       # complete suite (targets ≥89% coverage, currently ~95%)
+pytest --cov=app                       # full suite (see backend/pytest.ini: testpaths=tests; coverage fail_under in .coveragerc)
 pytest -m "not load"                   # skip long-running load tests
 pytest tests/test_user_testing_router.py::test_replay_endpoint  # focused smoke
 

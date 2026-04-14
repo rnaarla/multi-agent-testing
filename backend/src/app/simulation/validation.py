@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Set
+from typing import Any, Dict, Set
 
 MAX_SIMULATION_STEPS = 5000
 MAX_AGENTS = 64

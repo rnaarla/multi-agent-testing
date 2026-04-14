@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, Optional
 
-from app.providers import ProviderRegistry, ProviderConfig
+from app.providers import ProviderRegistry
 from app.providers.router import ProviderRouter
 
 from .agents import AgentContext, AgentObservation

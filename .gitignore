@@ -8,4 +8,6 @@ checklist.md
 *.coverage
 .pytest_cache/
 node_modules/
+frontend/dist/
+backend/.venv/
 backend/src/celerybeat-schedule

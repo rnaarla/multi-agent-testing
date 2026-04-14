@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional
 
 from .environment import EnvironmentState
+
+if TYPE_CHECKING:
+    from .llm import LLMDecisionEngine
 
 
 @dataclass
@@ -130,7 +133,7 @@ class RuleBasedAgent(AgentBase):
 class LLMAgent(AgentBase):
     """Agent that delegates decision making to an LLM provider."""
 
-    def __init__(self, context: AgentContext, config: Dict[str, Any], decision_engine: "LLMDecisionEngine"):
+    def __init__(self, context: AgentContext, config: Dict[str, Any], decision_engine: LLMDecisionEngine):
         super().__init__(context, config)
         self.decision_engine = decision_engine
 

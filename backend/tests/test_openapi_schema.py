@@ -22,6 +22,8 @@ def test_openapi_schema_snapshot():
     assert not missing, f"Missing paths in generated schema: {sorted(missing)}"
 
     unexpected = generated_paths - stored_paths
-    if unexpected:
-        docs_path.write_text(json.dumps(generated_schema, indent=2))
+    assert not unexpected, (
+        "OpenAPI schema drift: regenerate with `python scripts/generate_openapi.py` "
+        f"and commit docs/openapi-schema.json. New paths: {sorted(unexpected)}"
+    )
 
