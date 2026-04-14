@@ -7,8 +7,15 @@ import {
   startSimulationRun,
   listSimulationRuns,
   getSimulationRun,
-  getSimulationEvents
+  getSimulationEvents,
+  evaluateSimulationRun
 } from "../api/client";
+
+/** Preset assertions for the dashboard demo (targets: run, simulation, agent_id). */
+const DEMO_SIMULATION_ASSERTIONS = [
+  { id: "run-completed", type: "equals", target: "run", field: "status", expected: "completed" },
+  { id: "has-telemetry", type: "greater_than", target: "simulation", field: "event_count", expected: 0 }
+];
 
 // Styles
 const styles = {
@@ -339,6 +346,8 @@ export default function Dashboard() {
   const [simulationLoading, setSimulationLoading] = useState(false);
   const [selectedSimulation, setSelectedSimulation] = useState(null);
   const [simulationEvents, setSimulationEvents] = useState([]);
+  const [simulationEvalResult, setSimulationEvalResult] = useState(null);
+  const [simulationEvalLoading, setSimulationEvalLoading] = useState(false);
   
   // Fetch data
   const loadData = useCallback(async () => {
@@ -380,6 +389,7 @@ export default function Dashboard() {
   }, []);
 
   const loadSimulationDetails = useCallback(async (runId) => {
+    setSimulationEvalResult(null);
     try {
       const [run, events] = await Promise.all([
         getSimulationRun(runId),
@@ -389,6 +399,26 @@ export default function Dashboard() {
       setSimulationEvents(events);
     } catch (error) {
       console.error("Failed to load simulation details:", error);
+    }
+  }, []);
+
+  const runSimulationChecks = useCallback(async (runId) => {
+    setSimulationEvalLoading(true);
+    setSimulationEvalResult(null);
+    try {
+      const result = await evaluateSimulationRun(runId, {
+        assertions: DEMO_SIMULATION_ASSERTIONS
+      });
+      setSimulationEvalResult(result);
+    } catch (error) {
+      console.error("Simulation evaluation failed:", error);
+      setSimulationEvalResult({
+        passed: false,
+        error: error?.message || "Evaluation failed",
+        results: []
+      });
+    } finally {
+      setSimulationEvalLoading(false);
     }
   }, []);
 
@@ -464,6 +494,7 @@ export default function Dashboard() {
       await loadSimulationRuns();
       if (response?.run_id) {
         await loadSimulationDetails(response.run_id);
+        await runSimulationChecks(response.run_id);
         setActiveTab("simulation");
       }
     } catch (error) {
@@ -644,15 +675,27 @@ export default function Dashboard() {
       {/* Simulation Tab */}
       {activeTab === "simulation" && (
         <div>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "20px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "12px" }}>
             <h2 style={{ margin: 0 }}>Simulation Runs</h2>
-            <button
-              style={{ ...styles.button, ...styles.buttonPrimary }}
-              onClick={handleStartSimulation}
-              disabled={simulationLoading}
-            >
-              {simulationLoading ? "Launching..." : "Start Demo Simulation"}
-            </button>
+            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                style={{ ...styles.button, ...styles.buttonSecondary }}
+                onClick={() => selectedSimulation && runSimulationChecks(selectedSimulation.id)}
+                disabled={simulationEvalLoading || !selectedSimulation}
+                title="Re-run preset assertions on the selected run"
+              >
+                {simulationEvalLoading ? "Checking…" : "Run checks on selected"}
+              </button>
+              <button
+                type="button"
+                style={{ ...styles.button, ...styles.buttonPrimary }}
+                onClick={handleStartSimulation}
+                disabled={simulationLoading}
+              >
+                {simulationLoading ? "Launching…" : "Start demo + checks"}
+              </button>
+            </div>
           </div>
 
           <div style={styles.simulationLayout}>
@@ -692,6 +735,52 @@ export default function Dashboard() {
                   <div style={{ color: "#555", marginBottom: "10px" }}>
                     Scenario: {selectedSimulation.scenario} • Status: {selectedSimulation.status}
                   </div>
+
+                  {simulationEvalResult && (
+                    <div
+                      style={{
+                        marginBottom: "16px",
+                        padding: "14px",
+                        borderRadius: "10px",
+                        border: "1px solid #e0e0e0",
+                        background: simulationEvalResult.error
+                          ? "#fff5f5"
+                          : simulationEvalResult.passed
+                            ? "#f0fdf4"
+                            : "#fffbeb"
+                      }}
+                    >
+                      <div style={{ fontWeight: 600, marginBottom: "8px", color: "#1a1a1a" }}>
+                        {simulationEvalResult.error
+                          ? "Evaluation error"
+                          : simulationEvalResult.passed
+                            ? "Preset checks passed"
+                            : "Preset checks failed"}
+                      </div>
+                      {simulationEvalResult.error && (
+                        <div style={{ fontSize: "13px", color: "#b91c1c" }}>{simulationEvalResult.error}</div>
+                      )}
+                      {(simulationEvalResult.results || []).map((r) => (
+                        <div
+                          key={r.assertion_id}
+                          style={{
+                            fontSize: "13px",
+                            marginTop: "6px",
+                            color: r.passed ? "#166534" : "#9a3412"
+                          }}
+                        >
+                          <strong>{r.assertion_id}</strong> ({r.assertion_type}):{" "}
+                          {r.passed ? "ok" : r.message}
+                        </div>
+                      ))}
+                      {simulationEvalResult.events_used != null && (
+                        <div style={{ fontSize: "12px", color: "#666", marginTop: "8px" }}>
+                          Events used: {simulationEvalResult.events_used}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
                     {selectedSimulation.agents?.map((agent) => (
                       <div

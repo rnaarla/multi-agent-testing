@@ -83,8 +83,8 @@ def test_simulation_runner_persists_events(monkeypatch):
         events = session.execute(select(SimulationEvent)).fetchall()
         # 2 agents * steps
         assert len(events) == spec.steps * len(spec.agents)
-        run_row = session.execute(select(SimulationRun)).scalar_one()
-        assert run_row.status == "completed"
+        run_row = session.execute(select(SimulationRun)).mappings().one()
+        assert run_row["status"] == "completed"
         states = session.execute(select(SimulationAgentState)).fetchall()
         assert len(states) == len(spec.agents)
 

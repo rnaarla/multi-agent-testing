@@ -10,7 +10,7 @@ Multi-Agent Behavioral Testing Platform is an end-to-end lab for modelling, exec
 - Behavioral graphs with contracts, assertions, deterministic replay, and chaos modes.
 - Multi-cloud/provider routing (`openai`, `anthropic`, `azure`, `mock`) with regional fallbacks.
 - Sync + async runs, WebSocket log streaming, and historical diffing.
-- Real-time simulation sandbox with rule-based & LLM-driven agents, Redis event streams, and persistent analytics.
+- Real-time simulation sandbox with rule-based & LLM-driven agents, Redis event streams, persistent analytics, and **post-run assertion evaluation** (`POST /simulation/runs/{id}/evaluate`) for CI-style gates on stored telemetry.
 
 **Governance & Reliability**
 - PII/safety middleware, tenant-aware RBAC, immutable audit trails.
@@ -34,7 +34,7 @@ Multi-Agent Behavioral Testing Platform is an end-to-end lab for modelling, exec
 | ---- | ------- |
 | `backend/src/app` | FastAPI application, services, runner, observability, reliability toolkits |
 | `backend/tests` | Unit + integration suites (≥94% coverage) |
-| `frontend/` | React workbench (execution studio dashboards, WIP) |
+| `frontend/` | React dashboard (graphs, runs, analytics, simulation tab with **Start demo + checks**) |
 | `deploy/` | Deployment assets (multi-stage Dockerfile, promotion workflow, SLO catalog) |
 | `iac/terraform/` | Terraform module + root example for managed deployments |
 | `scripts/` | Devcontainer builder, release promotion CLI |
@@ -69,11 +69,17 @@ open http://localhost:5173              # frontend (if enabled in compose profil
 docker compose exec backend python -m app.scripts.seed_demo_data
 # Sign in with demo.admin@local / demo-password after seeding
 
-# Launch a sample multi-agent simulation (requires auth header)
+# Launch a sample multi-agent simulation (requires auth). The run completes in the request; successful completion returns HTTP 200 with JSON including run_id.
 curl -X POST http://localhost:8000/simulation/run \
      -H "Authorization: Bearer <token>" \
      -H "Content-Type: application/json" \
      -d @examples/sample-simulation.json
+
+# Optional: run assertions on persisted simulation events (requires run:read). Replace <run_id> with the id from the response above.
+curl -sS -X POST "http://localhost:8000/simulation/runs/<run_id>/evaluate" \
+     -H "Authorization: Bearer <token>" \
+     -H "Content-Type: application/json" \
+     -d '{"assertions":[{"id":"completed","type":"equals","target":"run","field":"status","expected":"completed"},{"id":"telemetry","type":"greater_than","target":"simulation","field":"event_count","expected":0}]}'
 ```
 
 > **Tip:** Provide `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc. in `.env` to exercise real providers. Otherwise the system runs with deterministic mocks.
@@ -136,7 +142,7 @@ See `backend/src/app/config.py` and `deploy/slos.yaml` for exhaustive knobs.
 5. **Monitor** – Scrape metrics at `/metrics/prometheus`; query analytics endpoints `/analytics/anomalies/latency` and `/analytics/anomalies/series` for drift.
 6. **Release Safely** – Call `/release/guard` or run `scripts/promote_release.py` to enforce SLO/error-budget policies before promotion.
 7. **Alert & Collaborate** – Configure `SLACK_WEBHOOK_URL` and hit `/collab/slack/notify` for engineering broadcast.
-8. **Simulate Agent Ecosystems** – POST `/simulation/run` with agent/environment configs, inspect `/simulation/runs`, `/simulation/runs/{id}`, and `/simulation/runs/{id}/events` for replay-ready telemetry.
+8. **Simulate Agent Ecosystems** – POST `/simulation/run` with agent/environment configs (synchronous completion returns **HTTP 200** with `run_id`, `status`, `steps`). Inspect `/simulation/runs`, `/simulation/runs/{id}`, and `/simulation/runs/{id}/events` for replay-ready telemetry. **Quality gates:** POST `/simulation/runs/{id}/evaluate` with `{ "assertions": [ ... ] }` (same assertion shapes as behavioral graphs; context targets include `run`, `simulation`, and each `agent_id`). **Dashboard:** open the **Simulation** tab, use **Start demo + checks** to launch the sample and run preset assertions, or select a run and click **Run checks on selected**.
 
 ---
 

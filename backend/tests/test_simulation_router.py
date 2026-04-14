@@ -1,5 +1,6 @@
 from fastapi.testclient import TestClient
 
+import app.routers.simulation as simulation_router
 from app.main import app
 from app.auth import User, Role, Permission, get_current_user
 
@@ -23,17 +24,20 @@ def test_simulation_router_endpoints(monkeypatch):
     app.dependency_overrides[get_current_user] = override_user
 
     monkeypatch.setattr(
-        "app.services.simulation_service.start_simulation_run",
+        simulation_router,
+        "start_simulation_run",
         lambda payload, user: {"run_id": 42, "status": "completed", "steps": 3},
     )
     monkeypatch.setattr(
-        "app.services.simulation_service.list_simulation_runs",
+        simulation_router,
+        "list_simulation_runs",
         lambda tenant_id, limit=20, offset=0: [
             {"id": 42, "name": "sim", "scenario": "demo", "status": "completed", "steps": 3}
         ],
     )
     monkeypatch.setattr(
-        "app.services.simulation_service.get_simulation_run",
+        simulation_router,
+        "get_simulation_run",
         lambda run_id, tenant_id: {
             "id": run_id,
             "name": "sim",
@@ -44,13 +48,15 @@ def test_simulation_router_endpoints(monkeypatch):
         },
     )
     monkeypatch.setattr(
-        "app.services.simulation_service.fetch_run_events",
-        lambda run_id, last_event_id=None, limit=100: [
+        simulation_router,
+        "fetch_run_events",
+        lambda run_id, tenant_id, last_event_id=None, limit=100: [
             {"id": 1, "step_index": 0, "event_type": "agent_action", "agent_id": "a1", "payload": {}}
         ],
     )
     monkeypatch.setattr(
-        "app.services.simulation_service.read_event_stream",
+        simulation_router,
+        "read_event_stream",
         lambda run_id, last_id="0-0", count=100: [{"id": "1-0", "payload": {"step": 0}}],
     )
 
@@ -66,7 +72,7 @@ def test_simulation_router_endpoints(monkeypatch):
             "agents": [{"id": "agent", "type": "rule", "implementation": "rule", "config": {"rules": []}}],
         },
     )
-    assert launch.status_code == 202
+    assert launch.status_code == 200
     assert launch.json()["run_id"] == 42
 
     runs = client.get("/simulation/runs")

@@ -12,6 +12,8 @@ from app.database import SessionLocal
 from app.models import SimulationRun, SimulationEvent, SimulationAgentState
 from app.simulation import SimulationRunner, SimulationSpec, AgentSpec
 from app.simulation.storage import SimulationEventStream
+from app.simulation.evaluation import evaluate_simulation_assertions
+from app.simulation.validation import validate_simulation_payload
 
 
 DEFAULT_REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
@@ -24,6 +26,7 @@ def _build_runner() -> SimulationRunner:
 def start_simulation_run(payload: Dict[str, Any], user: User) -> Dict[str, Any]:
     """Kick off a simulation run based on request payload."""
 
+    validate_simulation_payload(payload)
     spec = _build_spec(payload, user)
     runner = _build_runner()
     result = runner.run(spec)
@@ -38,7 +41,7 @@ def _build_spec(payload: Dict[str, Any], user: User) -> SimulationSpec:
     for agent in agents_cfg:
         agent_specs.append(
             AgentSpec(
-                agent_id=agent["id"],
+                agent_id=str(agent["id"]).strip(),
                 agent_type=agent.get("type", "generic"),
                 implementation=agent.get("implementation", "rule"),
                 config=agent.get("config", {}),
@@ -124,10 +127,24 @@ def get_simulation_run(run_id: int, tenant_id: str) -> Optional[Dict[str, Any]]:
         }
 
 
-def fetch_run_events(run_id: int, last_event_id: Optional[int] = None, limit: int = 100) -> List[Dict[str, Any]]:
+def fetch_run_events(
+    run_id: int,
+    tenant_id: str,
+    *,
+    last_event_id: Optional[int] = None,
+    limit: int = 100,
+) -> List[Dict[str, Any]]:
     with SessionLocal() as session:
-        query = select(SimulationEvent).where(SimulationEvent.c.run_id == run_id).order_by(SimulationEvent.c.id)
-        if last_event_id:
+        query = (
+            select(SimulationEvent)
+            .join(SimulationRun, SimulationRun.c.id == SimulationEvent.c.run_id)
+            .where(
+                SimulationEvent.c.run_id == run_id,
+                SimulationRun.c.tenant_id == tenant_id,
+            )
+            .order_by(SimulationEvent.c.id)
+        )
+        if last_event_id is not None:
             query = query.where(SimulationEvent.c.id > last_event_id)
         query = query.limit(limit)
         rows = session.execute(query).fetchall()
@@ -147,4 +164,27 @@ def fetch_run_events(run_id: int, last_event_id: Optional[int] = None, limit: in
 def read_event_stream(run_id: int, last_id: str = "0-0", count: int = 100) -> List[Dict[str, Any]]:
     stream = SimulationEventStream(DEFAULT_REDIS_URL)
     return stream.read(run_id, last_id=last_id, count=count)
+
+
+def evaluate_simulation_run(
+    run_id: int,
+    tenant_id: str,
+    assertions: List[Dict[str, Any]],
+    *,
+    event_limit: int = 5000,
+) -> Optional[Dict[str, Any]]:
+    """Load persisted events and evaluate assertions (post-run / CI gate)."""
+
+    run = get_simulation_run(run_id, tenant_id)
+    if not run:
+        return None
+    events = fetch_run_events(run_id, tenant_id, last_event_id=None, limit=min(event_limit, 10_000))
+    passed, results = evaluate_simulation_assertions(events, run, assertions)
+    return {
+        "run_id": run_id,
+        "passed": passed,
+        "assertion_count": len(results),
+        "results": results,
+        "events_used": len(events),
+    }
 

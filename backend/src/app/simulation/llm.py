@@ -55,8 +55,9 @@ class LLMDecisionEngine:
         )
 
         structured = self._parse_response(provider_response)
-        structured.update(provider_response)
-        return structured
+        # Provider metadata first; normalized action/messages/confidence from parsing
+        # must win so raw provider keys cannot clobber structured output.
+        return {**provider_response, **structured}
 
     def _parse_response(self, response: Dict[str, Any]) -> Dict[str, Any]:
         """Normalise the provider response into a structured dict."""
@@ -79,10 +80,12 @@ class LLMDecisionEngine:
                     except json.JSONDecodeError:
                         pass
 
-        # Fallback to default noop action
+        # Fallback to default noop action (visible to traces / downstream oracles)
         return {
             "action": {"type": "noop", "payload": {}},
             "messages": [],
             "confidence": response.get("confidence", 0.5),
+            "_parse_fallback": True,
+            "_parse_fallback_reason": "invalid_or_non_json_response",
         }
 

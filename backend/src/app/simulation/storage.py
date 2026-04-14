@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Dict, Iterable, List, Optional
 
+import json
+
 import redis
 from sqlalchemy import insert, update
 from sqlalchemy.orm import Session
@@ -36,24 +38,27 @@ class SimulationEventStream:
 
     def read(self, run_id: int, last_id: str = "0-0", count: int = 100) -> List[Dict[str, Any]]:
         key = self._key(run_id)
-        entries = self.redis.xrange(key, min=last_id, max="+", count=count)
+        try:
+            entries = self.redis.xrange(key, min=last_id, max="+", count=count)
+        except redis.RedisError:
+            return []
         results: List[Dict[str, Any]] = []
         for entry_id, data in entries:
             payload = data.get("payload")
-            if payload:
+            if not payload:
+                continue
+            try:
                 results.append({"id": entry_id, "payload": json_load(payload)})
+            except (json.JSONDecodeError, TypeError, ValueError) as exc:
+                results.append({"id": entry_id, "payload": None, "decode_error": str(exc)})
         return results
 
 
 def json_dump(payload: Dict[str, Any]) -> str:
-    import json
-
     return json.dumps(payload, default=str)
 
 
 def json_load(raw: str) -> Dict[str, Any]:
-    import json
-
     return json.loads(raw)
 
 

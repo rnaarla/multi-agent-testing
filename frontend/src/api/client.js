@@ -251,3 +251,16 @@ export async function getSimulationEvents(runId, params = {}) {
   const res = await fetch(url, { headers: getAuthHeaders() });
   return handleResponse(res);
 }
+
+export async function evaluateSimulationRun(runId, body, params = {}) {
+  const query = new URLSearchParams(params).toString();
+  const url = query
+    ? `${API}/simulation/runs/${runId}/evaluate?${query}`
+    : `${API}/simulation/runs/${runId}/evaluate`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    body: JSON.stringify(body)
+  });
+  return handleResponse(res);
+}

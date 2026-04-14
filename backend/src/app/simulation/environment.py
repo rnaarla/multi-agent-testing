@@ -6,8 +6,6 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Tuple
 
-from .agents import AgentAction
-
 
 @dataclass
 class EnvironmentState:
@@ -30,7 +28,7 @@ class Environment:
         self.state = EnvironmentState(data=initial_state or {})
         self.config = config or {}
 
-    def step(self, timestep: int, agent_id: str, action: AgentAction) -> Tuple[EnvironmentState, Dict[str, Any]]:
+    def step(self, timestep: int, agent_id: str, action: Any) -> Tuple[EnvironmentState, Dict[str, Any]]:
         """Apply an agent action and mutate the shared state."""
 
         result: Dict[str, Any] = {"status": "ack"}
@@ -43,7 +41,10 @@ class Environment:
         elif action_type == "increment":
             key = action.payload.get("key")
             amount = action.payload.get("amount", 1)
-            if key:
+            if not key:
+                result["status"] = "invalid_payload"
+                result["reason"] = "increment requires payload.key"
+            else:
                 current = self.state.data.get(key, 0)
                 new_value = current + amount
                 self.state.apply_updates({key: new_value})

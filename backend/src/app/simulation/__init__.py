@@ -17,7 +17,7 @@ from .agents import (
     RuleBasedAgent,
     LLMAgent,
 )
-from .runner import SimulationRunner, SimulationSpec
+from .runner import SimulationRunner, SimulationSpec, AgentSpec
 from .environment import EnvironmentState, Environment
 
 __all__ = [
@@ -30,6 +30,7 @@ __all__ = [
     "LLMAgent",
     "SimulationRunner",
     "SimulationSpec",
+    "AgentSpec",
     "EnvironmentState",
     "Environment",
 ]

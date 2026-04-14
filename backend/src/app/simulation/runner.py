@@ -86,65 +86,73 @@ class SimulationRunner:
         agents = self._instantiate_agents(spec.agents)
         inboxes: Dict[str, List[AgentMessage]] = defaultdict(list)
 
-        with SessionLocal() as session:
-            for step in range(spec.steps):
-                for agent_id, agent in agents.items():
-                    observation = agent.observe(
-                        state=environment.state,
-                        timestep=step,
-                        messages=inboxes.pop(agent_id, []),
-                    )
-                    action = agent.decide(observation)
-                    new_state, outcome = environment.step(step, agent_id, action)
+        last_completed_timestep = -1
+        try:
+            with SessionLocal() as session:
+                for step in range(spec.steps):
+                    for agent_id, agent in agents.items():
+                        observation = agent.observe(
+                            state=environment.state,
+                            timestep=step,
+                            messages=inboxes.pop(agent_id, []),
+                        )
+                        action = agent.decide(observation)
+                        new_state, outcome = environment.step(step, agent_id, action)
 
-                    event_id = self.persistence.log_event_with_session(
-                        session=session,
-                        run_id=run_record.run_id,
-                        step_index=step,
-                        agent_id=agent_id,
-                        event_type="agent_action",
-                        payload=outcome,
-                    )
+                        event_id = self.persistence.log_event_with_session(
+                            session=session,
+                            run_id=run_record.run_id,
+                            step_index=step,
+                            agent_id=agent_id,
+                            event_type="agent_action",
+                            payload=outcome,
+                        )
 
-                    # Queue messages for recipients
-                    for message in action.messages:
-                        if message.recipient_id:
-                            inboxes[message.recipient_id].append(message)
-                        else:
-                            # Broadcast to all except sender
-                            for target_id in agents.keys():
-                                if target_id != agent_id:
-                                    inboxes[target_id].append(message)
+                        # Queue messages for recipients
+                        for message in action.messages:
+                            if message.recipient_id:
+                                inboxes[message.recipient_id].append(message)
+                            else:
+                                # Broadcast to all except sender
+                                for target_id in agents.keys():
+                                    if target_id != agent_id:
+                                        inboxes[target_id].append(message)
 
-                    # Persist agent state & publish to Redis
-                    agent.update_state(observation, outcome)
-                    session.flush()
-                    self.persistence.upsert_agent_state(
-                        session=session,
-                        run_id=run_record.run_id,
-                        agent_id=agent_id,
-                        agent_type=agent.context.agent_type,
-                        state=agent.serialize_state(),
-                        last_event_id=event_id,
-                    )
-                    session.commit()
+                        # Persist agent state & publish to Redis
+                        agent.update_state(observation, outcome)
+                        session.flush()
+                        self.persistence.upsert_agent_state(
+                            session=session,
+                            run_id=run_record.run_id,
+                            agent_id=agent_id,
+                            agent_type=agent.context.agent_type,
+                            state=agent.serialize_state(),
+                            last_event_id=event_id,
+                        )
+                        session.commit()
 
-                    redis_event = {
-                        "run_id": run_record.run_id,
-                        "step_index": step,
-                        "agent_id": agent_id,
-                        "event": outcome,
-                    }
-                    self.redis_stream.append(run_record.run_id, redis_event)
+                        redis_event = {
+                            "run_id": run_record.run_id,
+                            "step_index": step,
+                            "agent_id": agent_id,
+                            "event": outcome,
+                        }
+                        self.redis_stream.append(run_record.run_id, redis_event)
 
-            self.persistence.complete_run(run_record.run_id, status="completed", steps=spec.steps)
+                    last_completed_timestep = step
 
-        return {
-            "run_id": run_record.run_id,
-            "redis_stream": run_record.redis_stream_key,
-            "status": "completed",
-            "steps": spec.steps,
-        }
+                self.persistence.complete_run(run_record.run_id, status="completed", steps=spec.steps)
+
+            return {
+                "run_id": run_record.run_id,
+                "redis_stream": run_record.redis_stream_key,
+                "status": "completed",
+                "steps": spec.steps,
+            }
+        except Exception:
+            partial_steps = max(0, last_completed_timestep + 1)
+            self.persistence.complete_run(run_record.run_id, status="failed", steps=partial_steps)
+            raise
 
     def _instantiate_agents(self, agent_specs: Sequence[AgentSpec]) -> Dict[str, AgentBase]:
         agents: Dict[str, AgentBase] = {}
