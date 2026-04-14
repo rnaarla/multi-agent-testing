@@ -1,6 +1,6 @@
 # CI/CD requirements and behavior
 
-This document describes **what GitHub Actions enforces today**, how jobs depend on each other, and what maintainers must satisfy when changing the API or tooling.
+This document describes **what GitHub Actions enforces today**, how jobs depend on each other, and what maintainers must satisfy when changing the API or tooling. It also summarizes **compliance-oriented capabilities** that this pipeline can support for regulated-industry programs (see **§11**—not a substitute for legal or production-only controls).
 
 Workflow file: [`.github/workflows/ci.yaml`](../.github/workflows/ci.yaml).
 
@@ -199,7 +199,40 @@ python scripts/generate_openapi.py
 
 ---
 
-## 11. Maintainer checklist (PR readiness)
+## 11. Compliance-oriented capabilities (what this pipeline can support)
+
+This workflow is **not** a substitute for legal agreements, formal risk analysis, or production-only controls. It **is** a practical layer auditors and security teams often map to **secure SDLC**, **change management**, and **vulnerability management** themes common across regulated sectors.
+
+### 11.1 Capabilities this repo’s CI/CD already contributes
+
+| Capability | How this pipeline supports it | Typical audit / control mapping (illustrative) |
+| ---------- | ------------------------------ | ---------------------------------------------- |
+| **Change & release discipline** | Every merge to gated branches runs automated checks before integration/deploy jobs; Git history + Actions run IDs provide **who changed what, when, with what result**. | SOC 2 **CC8** (change management); ISO 27001 **A.12.1** (operating procedures). |
+| **Automated security testing (baseline)** | **Trivy** filesystem scan + SARIF upload; scoped **Ruff** / **MyPy** on critical paths; **pytest** including tenant-isolation style tests. | SOC 2 **CC7** (vulnerability / monitoring); HIPAA **§164.308(a)(1)(ii)(B)** (protection against malicious software) as one *technical* input—not the whole safeguard. |
+| **Functional / correctness regression** | Backend test suite + coverage floor; **OpenAPI drift** gate reduces accidental API breakage that could affect clients handling sensitive workflows. | Supports **integrity** and **availability** narratives when tied to risk assessment. |
+| **Build reproducibility & provenance (partial)** | **Docker Buildx** builds images on `main` after tests; tags point at a **known commit**. (Signing / SBOM / SLSA attestations are **not** in this file yet—extend if required.) | PCI DSS **6** (secure systems); customer due-diligence on supply chain. |
+| **Frontend integrity** | **Lint + production build** catch whole classes of defects before release. | General product quality; supports change-control evidence. |
+
+### 11.2 Regulated industries — how teams usually use CI/CD *alongside* other evidence
+
+| Sector | CI/CD is strong evidence for… | Still required outside CI (examples) |
+| ------ | ------------------------------ | -------------------------------------- |
+| **Healthcare (e.g. HIPAA)** | Technical safeguards implemented in code (access patterns, tests), change control for software, vulnerability scanning artifacts. | BAA, workforce training, risk analysis, **production** audit logs & retention, breach process, physical/administrative safeguards. |
+| **Finance (e.g. SOC 2, PCI if in scope)** | CC6/CC7/CC8-style narratives for logical access, monitoring, and change management when PR + CI + protected branches are documented. | Access reviews, vendor management, **production** logging/monitoring, incident response; PCI network segmentation and ASV scans if handling card data. |
+| **Other regulated contexts (GDPR, GLBA, etc.)** | Demonstrating **secure development** and **documented release process** for processing systems. | Lawful basis, DPIA, data subject rights procedures, DPA, cross-border transfer mechanisms—**legal / process**, not pytest. |
+
+### 11.3 Explicit non-claims
+
+- This document does **not** state that running this workflow makes the product **HIPAA-compliant**, **SOC 2 certified**, **PCI DSS validated**, or equivalent.
+- **Production** controls (encryption at rest in live DBs, KMS policies, backup/DR drills, SIEM retention, pen tests) are **orthogonal** to this YAML; reference your environment’s runbooks and GRC system for those.
+
+### 11.4 Extending the pipeline for stronger compliance evidence
+
+When your GRC program requires it, common additions include: **dependency review / Dependabot with SLAs**, **secret scanning** on PRs, **SAST** (e.g. CodeQL), **SBOM** per image, **signed containers**, **IaC policy** (OPA/Conftest), **branch protection + required reviewers**, and **immutable artifact retention** aligned to your retention policy.
+
+---
+
+## 12. Maintainer checklist (PR readiness)
 
 1. `cd backend && ./scripts/ruff_critical.sh && ./scripts/mypy_critical.sh && pytest -v --cov=app`
 2. `cd frontend && npm ci && npm run lint && npm run build`
@@ -209,7 +242,7 @@ python scripts/generate_openapi.py
 
 ---
 
-## 12. Known gaps (honest)
+## 13. Known gaps (honest)
 
 - **MyPy / Ruff** are **scoped**, not repo-wide.
 - **Codecov** may need configuration for private repositories.
