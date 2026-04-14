@@ -215,3 +215,39 @@ export async function getProviders() {
   const res = await fetch(`${API}/providers`);
   return handleResponse(res);
 }
+
+// ============================================================================
+// Simulation
+// ============================================================================
+
+export async function startSimulationRun(payload) {
+  const res = await fetch(`${API}/simulation/run`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    body: JSON.stringify(payload)
+  });
+  return handleResponse(res);
+}
+
+export async function listSimulationRuns(params = {}) {
+  const query = new URLSearchParams(params).toString();
+  const url = query ? `${API}/simulation/runs?${query}` : `${API}/simulation/runs`;
+  const res = await fetch(url, { headers: getAuthHeaders() });
+  return handleResponse(res);
+}
+
+export async function getSimulationRun(runId) {
+  const res = await fetch(`${API}/simulation/runs/${runId}`, {
+    headers: getAuthHeaders()
+  });
+  return handleResponse(res);
+}
+
+export async function getSimulationEvents(runId, params = {}) {
+  const query = new URLSearchParams(params).toString();
+  const url = query
+    ? `${API}/simulation/runs/${runId}/events?${query}`
+    : `${API}/simulation/runs/${runId}/events`;
+  const res = await fetch(url, { headers: getAuthHeaders() });
+  return handleResponse(res);
+}

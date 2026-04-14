@@ -18,7 +18,7 @@ from contextlib import asynccontextmanager
 import os
 import structlog
 
-from app.routers import graphs, runs, metrics, auth, release, analytics, collab, user_testing
+from app.routers import graphs, runs, metrics, auth, release, analytics, collab, user_testing, simulation
 from app.database import init_db
 from app.utils.request_context import RequestContextMiddleware
 from app.config import get_settings
@@ -93,6 +93,7 @@ app.include_router(release.router, prefix="/release", tags=["Release Guard"])
 app.include_router(analytics.router, prefix="/analytics", tags=["Analytics"])
 app.include_router(collab.router, prefix="/collab", tags=["Collaboration"])
 app.include_router(user_testing.router, prefix="/user-testing", tags=["User Testing"])
+app.include_router(simulation.router)
 
 
 # Global exception handler

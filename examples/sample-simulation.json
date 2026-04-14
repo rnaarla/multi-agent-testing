@@ -1,0 +1,44 @@
+{
+  "name": "demo-simulation",
+  "scenario": "support-escalation",
+  "steps": 6,
+  "environment": {
+    "state": { "tickets_open": 3, "satisfaction": 0.6 },
+    "config": {}
+  },
+  "agents": [
+    {
+      "id": "intake_agent",
+      "type": "support",
+      "implementation": "llm",
+      "config": {
+        "provider": "openai",
+        "model": "gpt-4o-mini",
+        "system_prompt": "You are a helpful intake agent triaging customer issues.",
+        "temperature": 0.3
+      }
+    },
+    {
+      "id": "resolver_agent",
+      "type": "expert",
+      "implementation": "rule",
+      "config": {
+        "rules": [
+          {
+            "name": "resolve_ticket",
+            "when": { "tickets_open": 3 },
+            "action": { "type": "increment", "payload": { "key": "tickets_open", "amount": -1 } },
+            "messages": [
+              {
+                "to": "intake_agent",
+                "content": { "summary": "Ticket resolved", "status": "closed" }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "metadata": { "source": "readme" }
+}
+

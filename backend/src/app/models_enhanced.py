@@ -354,6 +354,61 @@ MetricsDaily = Table(
 
 
 # ============================================================================
+# Simulation (Agents, Runs, Events)
+# ============================================================================
+
+SimulationRun = Table(
+    "simulation_runs",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("name", String(255)),
+    Column("scenario", String(255)),
+    Column("status", String(50), default="pending"),
+    Column("tenant_id", String(128), default="default"),
+    Column("config", JSON),
+    Column("steps_executed", Integer, default=0),
+    Column("started_at", DateTime),
+    Column("completed_at", DateTime),
+    Column("created_by", Integer, ForeignKey("users.id")),
+    Column("metadata", JSON),
+    Column("created_at", DateTime, default=utcnow),
+    Column("updated_at", DateTime, default=utcnow, onupdate=utcnow),
+    Index("idx_simrun_status", "status"),
+    Index("idx_simrun_tenant", "tenant_id"),
+    Index("idx_simrun_started", "started_at"),
+)
+
+SimulationEvent = Table(
+    "simulation_events",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("run_id", Integer, ForeignKey("simulation_runs.id"), nullable=False),
+    Column("step_index", Integer, nullable=False),
+    Column("agent_id", String(128)),
+    Column("event_type", String(64), nullable=False),
+    Column("payload", JSON, nullable=False),
+    Column("created_at", DateTime, default=utcnow),
+    Index("idx_simevent_run", "run_id"),
+    Index("idx_simevent_step", "step_index"),
+)
+
+SimulationAgentState = Table(
+    "simulation_agent_states",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("run_id", Integer, ForeignKey("simulation_runs.id"), nullable=False),
+    Column("agent_id", String(128), nullable=False),
+    Column("agent_type", String(128)),
+    Column("state", JSON, nullable=False),
+    Column("last_event_id", Integer, ForeignKey("simulation_events.id")),
+    Column("created_at", DateTime, default=utcnow),
+    Column("updated_at", DateTime, default=utcnow, onupdate=utcnow),
+    Index("idx_simstate_run", "run_id"),
+    Index("idx_simstate_agent", "agent_id"),
+)
+
+
+# ============================================================================
 # Safety and Governance
 # ============================================================================
 

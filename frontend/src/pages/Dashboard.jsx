@@ -1,5 +1,14 @@
 import { useEffect, useState, useCallback } from "react";
-import { fetchGraphs, runGraph, fetchMetrics, fetchRuns } from "../api/client";
+import {
+  fetchGraphs,
+  runGraph,
+  fetchMetrics,
+  fetchRuns,
+  startSimulationRun,
+  listSimulationRuns,
+  getSimulationRun,
+  getSimulationEvents
+} from "../api/client";
 
 // Styles
 const styles = {
@@ -8,6 +17,42 @@ const styles = {
     margin: "0 auto",
     padding: "20px",
     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+  },
+  simulationLayout: {
+    display: "grid",
+    gridTemplateColumns: "300px 1fr",
+    gap: "20px",
+    alignItems: "start"
+  },
+  simulationRuns: {
+    background: "white",
+    borderRadius: "12px",
+    border: "1px solid #e0e0e0",
+    overflow: "hidden"
+  },
+  simulationRunItem: {
+    padding: "15px",
+    borderBottom: "1px solid #f0f0f0",
+    cursor: "pointer"
+  },
+  simulationRunItemActive: {
+    background: "#eef2ff"
+  },
+  simulationPanel: {
+    background: "white",
+    borderRadius: "12px",
+    border: "1px solid #e0e0e0",
+    padding: "20px"
+  },
+  eventList: {
+    marginTop: "20px",
+    maxHeight: "400px",
+    overflow: "auto",
+    borderTop: "1px solid #f0f0f0"
+  },
+  eventItem: {
+    padding: "12px 0",
+    borderBottom: "1px solid #f5f5f5"
   },
   header: {
     display: "flex",
@@ -290,6 +335,10 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [selectedRun, setSelectedRun] = useState(null);
   const [executingGraphs, setExecutingGraphs] = useState(new Set());
+  const [simulationRuns, setSimulationRuns] = useState([]);
+  const [simulationLoading, setSimulationLoading] = useState(false);
+  const [selectedSimulation, setSelectedSimulation] = useState(null);
+  const [simulationEvents, setSimulationEvents] = useState([]);
   
   // Fetch data
   const loadData = useCallback(async () => {
@@ -303,6 +352,12 @@ export default function Dashboard() {
       setGraphs(graphsData);
       setRuns(runsData);
       setMetrics(metricsData);
+      try {
+        const simRuns = await listSimulationRuns();
+        setSimulationRuns(simRuns);
+      } catch (simError) {
+        console.warn("Simulation runs unavailable:", simError);
+      }
     } catch (error) {
       console.error("Failed to load data:", error);
     } finally {
@@ -311,6 +366,37 @@ export default function Dashboard() {
   }, []);
   
   useEffect(() => { loadData(); }, [loadData]);
+
+  const loadSimulationRuns = useCallback(async () => {
+    setSimulationLoading(true);
+    try {
+      const runs = await listSimulationRuns();
+      setSimulationRuns(runs);
+    } catch (error) {
+      console.error("Failed to load simulation runs:", error);
+    } finally {
+      setSimulationLoading(false);
+    }
+  }, []);
+
+  const loadSimulationDetails = useCallback(async (runId) => {
+    try {
+      const [run, events] = await Promise.all([
+        getSimulationRun(runId),
+        getSimulationEvents(runId)
+      ]);
+      setSelectedSimulation(run);
+      setSimulationEvents(events);
+    } catch (error) {
+      console.error("Failed to load simulation details:", error);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === "simulation") {
+      loadSimulationRuns();
+    }
+  }, [activeTab, loadSimulationRuns]);
   
   // Run a graph
   const handleRunGraph = async (graphId) => {
@@ -326,6 +412,64 @@ export default function Dashboard() {
         next.delete(graphId);
         return next;
       });
+    }
+  };
+
+  const handleStartSimulation = async () => {
+    setSimulationLoading(true);
+    try {
+      const payload = {
+        name: "demo-simulation",
+        scenario: "support-escalation",
+        steps: 6,
+        environment: {
+          state: { tickets_open: 3, satisfaction: 0.6 },
+          config: {}
+        },
+        agents: [
+          {
+            id: "intake_agent",
+            type: "support",
+            implementation: "llm",
+            config: {
+              provider: "openai",
+              model: "gpt-4o-mini",
+              system_prompt: "You are a friendly intake specialist summarising user issues.",
+              temperature: 0.3
+            }
+          },
+          {
+            id: "resolver_agent",
+            type: "expert",
+            implementation: "rule",
+            config: {
+              rules: [
+                {
+                  name: "resolve_ticket",
+                  when: { tickets_open: 3 },
+                  action: { type: "increment", payload: { key: "tickets_open", amount: -1 } },
+                  messages: [
+                    {
+                      to: "intake_agent",
+                      content: { summary: "Ticket resolved", status: "closed" }
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      };
+      const response = await startSimulationRun(payload);
+      await loadSimulationRuns();
+      if (response?.run_id) {
+        await loadSimulationDetails(response.run_id);
+        setActiveTab("simulation");
+      }
+    } catch (error) {
+      console.error("Failed to start simulation run:", error);
+    } finally {
+      setSimulationLoading(false);
     }
   };
   
@@ -372,7 +516,7 @@ export default function Dashboard() {
       
       {/* Tabs */}
       <div style={styles.tabs}>
-        {["graphs", "runs", "analytics"].map(tab => (
+        {["graphs", "runs", "analytics", "simulation"].map(tab => (
           <button
             key={tab}
             style={{
@@ -497,6 +641,113 @@ export default function Dashboard() {
         </div>
       )}
       
+      {/* Simulation Tab */}
+      {activeTab === "simulation" && (
+        <div>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "20px" }}>
+            <h2 style={{ margin: 0 }}>Simulation Runs</h2>
+            <button
+              style={{ ...styles.button, ...styles.buttonPrimary }}
+              onClick={handleStartSimulation}
+              disabled={simulationLoading}
+            >
+              {simulationLoading ? "Launching..." : "Start Demo Simulation"}
+            </button>
+          </div>
+
+          <div style={styles.simulationLayout}>
+            <div style={styles.simulationRuns}>
+              {simulationRuns.map((run) => {
+                const isActive = selectedSimulation?.id === run.id;
+                return (
+                  <div
+                    key={run.id}
+                    style={{
+                      ...styles.simulationRunItem,
+                      ...(isActive ? styles.simulationRunItemActive : {})
+                    }}
+                    onClick={() => loadSimulationDetails(run.id)}
+                  >
+                    <div style={{ fontWeight: 600 }}>{run.name}</div>
+                    <div style={{ fontSize: "12px", color: "#666" }}>
+                      Scenario: {run.scenario} • Status: {run.status}
+                    </div>
+                    <div style={{ fontSize: "12px", color: "#999", marginTop: "4px" }}>
+                      Steps: {run.steps || 0}
+                    </div>
+                  </div>
+                );
+              })}
+              {simulationRuns.length === 0 && (
+                <div style={{ padding: "20px", textAlign: "center", color: "#666" }}>
+                  No simulation runs yet. Launch one to explore agent behaviour.
+                </div>
+              )}
+            </div>
+
+            <div style={styles.simulationPanel}>
+              {selectedSimulation ? (
+                <>
+                  <h3 style={{ marginTop: 0 }}>{selectedSimulation.name}</h3>
+                  <div style={{ color: "#555", marginBottom: "10px" }}>
+                    Scenario: {selectedSimulation.scenario} • Status: {selectedSimulation.status}
+                  </div>
+                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                    {selectedSimulation.agents?.map((agent) => (
+                      <div
+                        key={agent.agent_id}
+                        style={{
+                          background: "#f5f5ff",
+                          borderRadius: "10px",
+                          padding: "12px",
+                          flex: "1 1 200px"
+                        }}
+                      >
+                        <div style={{ fontWeight: 600 }}>{agent.agent_id}</div>
+                        <div style={{ fontSize: "12px", color: "#555" }}>{agent.agent_type}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div style={{ marginTop: "20px" }}>
+                    <h4>Event Timeline</h4>
+                    <div style={styles.eventList}>
+                      {simulationEvents.map((event) => (
+                        <div key={event.id} style={styles.eventItem}>
+                          <div style={{ fontSize: "12px", color: "#666" }}>
+                            Step {event.step_index} • {event.agent_id || "environment"}
+                          </div>
+                          <pre
+                            style={{
+                              background: "#f5f5f5",
+                              borderRadius: "8px",
+                              padding: "12px",
+                              fontSize: "12px",
+                              overflow: "auto"
+                            }}
+                          >
+                            {JSON.stringify(event.payload, null, 2)}
+                          </pre>
+                        </div>
+                      ))}
+                      {simulationEvents.length === 0 && (
+                        <div style={{ padding: "20px", textAlign: "center", color: "#666" }}>
+                          No events recorded yet.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div style={{ padding: "40px", textAlign: "center", color: "#666" }}>
+                  Select a simulation run to inspect actions, communications, and resulting state.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Run Details Modal */}
       <RunDetailsModal run={selectedRun} onClose={() => setSelectedRun(null)} />
     </div>

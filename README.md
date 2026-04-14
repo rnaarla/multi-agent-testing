@@ -10,6 +10,7 @@ Multi-Agent Behavioral Testing Platform is an end-to-end lab for modelling, exec
 - Behavioral graphs with contracts, assertions, deterministic replay, and chaos modes.
 - Multi-cloud/provider routing (`openai`, `anthropic`, `azure`, `mock`) with regional fallbacks.
 - Sync + async runs, WebSocket log streaming, and historical diffing.
+- Real-time simulation sandbox with rule-based & LLM-driven agents, Redis event streams, and persistent analytics.
 
 **Governance & Reliability**
 - PII/safety middleware, tenant-aware RBAC, immutable audit trails.
@@ -67,6 +68,12 @@ open http://localhost:5173              # frontend (if enabled in compose profil
 # (Optional) Seed demo data for the dashboard
 docker compose exec backend python -m app.scripts.seed_demo_data
 # Sign in with demo.admin@local / demo-password after seeding
+
+# Launch a sample multi-agent simulation (requires auth header)
+curl -X POST http://localhost:8000/simulation/run \
+     -H "Authorization: Bearer <token>" \
+     -H "Content-Type: application/json" \
+     -d @examples/sample-simulation.json
 ```
 
 > **Tip:** Provide `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc. in `.env` to exercise real providers. Otherwise the system runs with deterministic mocks.
@@ -129,6 +136,7 @@ See `backend/src/app/config.py` and `deploy/slos.yaml` for exhaustive knobs.
 5. **Monitor** – Scrape metrics at `/metrics/prometheus`; query analytics endpoints `/analytics/anomalies/latency` and `/analytics/anomalies/series` for drift.
 6. **Release Safely** – Call `/release/guard` or run `scripts/promote_release.py` to enforce SLO/error-budget policies before promotion.
 7. **Alert & Collaborate** – Configure `SLACK_WEBHOOK_URL` and hit `/collab/slack/notify` for engineering broadcast.
+8. **Simulate Agent Ecosystems** – POST `/simulation/run` with agent/environment configs, inspect `/simulation/runs`, `/simulation/runs/{id}`, and `/simulation/runs/{id}/events` for replay-ready telemetry.
 
 ---
 
