@@ -9,7 +9,7 @@ Multi-Agent Behavioral Testing Platform is an end-to-end lab for modelling, exec
 | FastAPI backend with graphs, runs, metrics, user-testing, **simulation** (`/simulation/*`), **post-run `/simulation/runs/{id}/evaluate`**, auth (JWT / API key), RBAC | “Sync + async runs” and WebSocket streaming as **first-class** everywhere—verify per route before relying on it |
 | React dashboard: graphs, runs, analytics, **simulation tab** (demo + preset checks) | Drag-and-drop graph builder, full execution studio |
 | Docker Compose local stack; `pytest` on `tests/`; OpenAPI snapshot in `docs/openapi-schema.json` | Full GitOps / managed Helm as defaults |
-| CI: backend tests + coverage floor, **critical-path Ruff + mypy**, frontend **lint + build** | Repo-wide strict mypy, performance budgets in CI |
+| CI: backend tests + coverage floor, **critical-path Ruff + mypy**, frontend **lint + build** — documented in **`docs/CI_CD.md`** | Repo-wide strict mypy, performance budgets in CI |
 
 Some bullets under **Feature Highlights** below describe **intended** capabilities; treat the table above as the honesty boundary for what this README guarantees.
 
@@ -44,7 +44,8 @@ Some bullets under **Feature Highlights** below describe **intended** capabiliti
 | Path | Purpose |
 | ---- | ------- |
 | `backend/src/app` | FastAPI application, services, runner, observability, reliability toolkits |
-| `backend/tests` | Unit + integration suites (≥94% coverage) |
+| `backend/tests` | Unit + integration suites; coverage gate in `.coveragerc` (see **docs/CI_CD.md**) |
+| `docs/CI_CD.md` | **CI/CD requirements**: triggers, jobs, env vars, gates, branch rules, maintainer checklist |
 | `frontend/` | React dashboard (graphs, runs, analytics, simulation tab with **Start demo + checks**) |
 | `deploy/` | Deployment assets (multi-stage Dockerfile, promotion workflow, SLO catalog) |
 | `iac/terraform/` | Terraform module + root example for managed deployments |
@@ -158,6 +159,8 @@ See `backend/src/app/config.py` and `deploy/slos.yaml` for exhaustive knobs.
 ---
 
 ## 🔍 Testing & Quality Gates
+
+**CI/CD (what GitHub enforces, branch rules, Ruff/mypy scopes, Codecov, integration smoke):** see **[docs/CI_CD.md](docs/CI_CD.md)**.
 
 ```bash
 cd backend
