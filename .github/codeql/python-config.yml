@@ -1,0 +1,6 @@
+name: "CodeQL (Python)"
+paths:
+  - backend/src
+paths-ignore:
+  - backend/tests
+  - "**/__pycache__/**"

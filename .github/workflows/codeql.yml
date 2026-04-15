@@ -1,0 +1,72 @@
+# SAST: CodeQL static analysis (SOC2/CC7-style evidence when paired with triage).
+name: CodeQL
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master]
+  schedule:
+    - cron: "0 6 * * 1"
+
+concurrency:
+  group: codeql-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: python
+            config-file: ./.github/codeql/python-config.yml
+          - language: javascript-typescript
+            config-file: ./.github/codeql/javascript-config.yml
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          config-file: ${{ matrix.config-file }}
+
+      - name: Install Python dependencies
+        if: matrix.language == 'python'
+        run: pip install -r backend/requirements.txt
+
+      - name: Prepare Python (compileall; no root package)
+        if: matrix.language == 'python'
+        run: python -m compileall -q backend/src
+
+      - name: Set up Node.js (frontend)
+        if: matrix.language == 'javascript-typescript'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies (CodeQL)
+        if: matrix.language == 'javascript-typescript'
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"

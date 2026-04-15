@@ -5,10 +5,18 @@ on:
     branches: [main, master, develop]
   pull_request:
     branches: [main, master]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   PYTHON_VERSION: "3.11"
   NODE_VERSION: "20"
+
+permissions:
+  contents: read
 
 jobs:
   # ============================================================================
@@ -16,7 +24,8 @@ jobs:
   # ============================================================================
   backend-test:
     runs-on: ubuntu-latest
-    
+    timeout-minutes: 25
+
     services:
       postgres:
         image: postgres:15
@@ -30,7 +39,7 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-      
+
       redis:
         image: redis:7-alpine
         ports:
@@ -43,33 +52,31 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          cache: 'pip'
+          cache: pip
           cache-dependency-path: backend/requirements.txt
-      
+
       - name: Install dependencies
         run: |
           cd backend
           pip install -r requirements.txt
-      
+
       - name: Lint with Ruff (critical paths)
         run: |
           cd backend
           pip install ruff
-          chmod +x scripts/ruff_critical.sh
           ./scripts/ruff_critical.sh
-      
+
       - name: Type check (critical paths)
         run: |
           cd backend
           pip install mypy
-          chmod +x scripts/mypy_critical.sh
           ./scripts/mypy_critical.sh
-      
+
       - name: Run tests
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/agent_tests_test
@@ -78,43 +85,65 @@ jobs:
         run: |
           cd backend
           pytest -v --cov=app --cov-report=xml
-      
+
       - name: Upload coverage
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
+        continue-on-error: true
         with:
+          token: ${{ secrets.CODECOV_TOKEN }}
           file: backend/coverage.xml
           flags: backend
+          fail_ci_if_error: false
 
   # ============================================================================
   # Frontend Tests
   # ============================================================================
   frontend-test:
     runs-on: ubuntu-latest
-    
+    timeout-minutes: 20
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
+          cache: npm
           cache-dependency-path: frontend/package-lock.json
-      
+
       - name: Install dependencies
         run: |
           cd frontend
           npm ci || npm install
-      
+
       - name: Lint
         run: |
           cd frontend
           npm run lint
-      
+
       - name: Build
         run: |
           cd frontend
           npm run build
+
+  # ============================================================================
+  # Dependency review (PRs only; complements Dependabot)
+  # ============================================================================
+  dependency-review:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
 
   # ============================================================================
   # Integration Tests
@@ -122,88 +151,113 @@ jobs:
   integration-test:
     runs-on: ubuntu-latest
     needs: [backend-test, frontend-test]
-    
+    timeout-minutes: 30
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up Docker Compose
-        run: |
-          docker compose version
-      
+        run: docker compose version
+
       - name: Build containers
-        run: |
-          docker compose build
-      
+        run: docker compose build
+
       - name: Start services
         run: |
           docker compose up -d db redis backend
           sleep 10
-      
+
       - name: Health check
-        run: |
-          curl -f http://localhost:8000/health || exit 1
-      
+        run: curl -fsS http://localhost:8000/health
+
       - name: Run integration tests
         run: |
-          # Test graph upload
-          curl -X POST http://localhost:8000/graphs \
+          curl -fsS -X POST http://localhost:8000/graphs \
             -H "Content-Type: application/json" \
-            -d '{"name":"test-graph","content":{"nodes":[{"id":"n1","type":"mock"}],"edges":[]}}' \
-            || exit 1
-          
-          # Test list graphs
-          curl -f http://localhost:8000/graphs || exit 1
-          
-          # Test metrics endpoint
-          curl -f http://localhost:8000/metrics/summary || exit 1
-      
+            -d '{"name":"test-graph","content":{"nodes":[{"id":"n1","type":"mock"}],"edges":[]}}'
+
+          curl -fsS http://localhost:8000/graphs
+
+          curl -fsS http://localhost:8000/metrics/summary
+
       - name: Cleanup
         if: always()
         run: docker compose down -v
 
   # ============================================================================
-  # Security Scan
+  # Security scan (filesystem; SARIF for Security tab)
   # ============================================================================
   security-scan:
     runs-on: ubuntu-latest
-    
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@v0.35.0
         with:
-          scan-type: 'fs'
-          scan-ref: '.'
-          format: 'sarif'
-          output: 'trivy-results.sarif'
-      
+          scan-type: fs
+          scan-ref: .
+          format: sarif
+          output: trivy-results.sarif
+
       - name: Upload Trivy scan results
-        uses: github/codeql-action/upload-sarif@v2
+        uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: 'trivy-results.sarif'
+          sarif_file: trivy-results.sarif
 
   # ============================================================================
-  # Build and Push Docker Images
+  # Secret scan (verified credentials only; reduces false positives)
+  # ============================================================================
+  secret-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Fork PRs: avoid running untrusted code with elevated patterns; base repo PRs only.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: TruffleHog
+        uses: trufflesecurity/trufflehog@v3.94.3
+        with:
+          path: ./
+          version: "3.94.3"
+          extra_args: --only-verified
+
+  # ============================================================================
+  # Build and push Docker images (default branch only)
   # ============================================================================
   build-images:
     runs-on: ubuntu-latest
     needs: [integration-test]
-    if: github.ref == 'refs/heads/main'
-    
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-      
-      - name: Login to GitHub Container Registry
+
+      - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      
+
       - name: Build and push backend
         uses: docker/build-push-action@v5
         with:
@@ -212,7 +266,9 @@ jobs:
           tags: ghcr.io/${{ github.repository }}/backend:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      
+          provenance: mode=max
+          sbom: true
+
       - name: Build and push frontend
         uses: docker/build-push-action@v5
         with:
@@ -221,22 +277,73 @@ jobs:
           tags: ghcr.io/${{ github.repository }}/frontend:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          provenance: mode=max
+          sbom: true
 
   # ============================================================================
-  # Deploy (Example - customize for your infrastructure)
+  # SBOM artifacts (CycloneDX via Trivy; retained for audit / GRC evidence)
+  # ============================================================================
+  sbom-artifacts:
+    runs-on: ubuntu-latest
+    needs: [build-images]
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: SBOM backend (CycloneDX)
+        uses: aquasecurity/trivy-action@v0.35.0
+        with:
+          scan-type: image
+          image-ref: ghcr.io/${{ github.repository }}/backend:latest
+          format: cyclonedx
+          output: sbom-backend.cdx.json
+          exit-code: "0"
+
+      - name: SBOM frontend (CycloneDX)
+        uses: aquasecurity/trivy-action@v0.35.0
+        with:
+          scan-type: image
+          image-ref: ghcr.io/${{ github.repository }}/frontend:latest
+          format: cyclonedx
+          output: sbom-frontend.cdx.json
+          exit-code: "0"
+
+      - name: Upload SBOM artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-cyclonedx-${{ github.sha }}
+          path: |
+            sbom-backend.cdx.json
+            sbom-frontend.cdx.json
+          if-no-files-found: error
+          retention-days: 90
+
+  # ============================================================================
+  # Deploy (placeholder; wire to your platform when ready)
   # ============================================================================
   deploy:
     runs-on: ubuntu-latest
     needs: [build-images]
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    timeout-minutes: 15
     environment: production
-    
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Deploy to production
         run: |
           echo "Deployment would happen here"
-          # kubectl apply -f k8s/
-          # or
-          # docker compose -f docker-compose.prod.yaml up -d
+          echo "Run ref: ${{ github.ref }} sha: ${{ github.sha }}"

@@ -1,0 +1,6 @@
+name: "CodeQL (JavaScript/TypeScript)"
+paths:
+  - frontend/src
+paths-ignore:
+  - frontend/node_modules
+  - frontend/dist

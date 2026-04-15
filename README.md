@@ -45,7 +45,7 @@ Some bullets under **Feature Highlights** below describe **intended** capabiliti
 | ---- | ------- |
 | `backend/src/app` | FastAPI application, services, runner, observability, reliability toolkits |
 | `backend/tests` | Unit + integration suites; coverage gate in `.coveragerc` (see **docs/CI_CD.md**) |
-| `docs/CI_CD.md` | **CI/CD requirements**: triggers, jobs, env vars, gates, branch rules, maintainer checklist |
+| `docs/CI_CD.md` | **CI/CD requirements**: triggers, jobs, env vars, gates, branch rules, CodeQL, Dependabot, SBOM/provenance, maintainer checklist |
 | `frontend/` | React dashboard (graphs, runs, analytics, simulation tab with **Start demo + checks**) |
 | `deploy/` | Deployment assets (multi-stage Dockerfile, promotion workflow, SLO catalog) |
 | `iac/terraform/` | Terraform module + root example for managed deployments |
