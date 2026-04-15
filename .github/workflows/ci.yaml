@@ -230,7 +230,7 @@ jobs:
         with:
           path: ./
           version: "3.94.3"
-          extra_args: --only-verified
+          extra_args: --results=verified
 
   # ============================================================================
   # Build and push Docker images (default branch only)

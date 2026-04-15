@@ -173,7 +173,7 @@ There is **no** required `npm test` step in CI today.
 
 ### 7.1 Secret scan (`secret-scan`)
 
-- **TruffleHog** (`trufflesecurity/trufflehog` action, **pinned** release; CLI image version pinned via action input) with **`--only-verified`** to prioritize confirmed findings.
+- **TruffleHog** (`trufflesecurity/trufflehog` action, **pinned** release; CLI image version pinned via action input) with **`--results=verified`** (CLI v3+; avoids deprecated `--only-verified`).
 - **Fork PRs:** job is **skipped** when `github.event.pull_request.head.repo.full_name != github.repository` so untrusted forks are not scanned under the same policy as trusted PRs (adjust if you use a different fork strategy).
 
 **Requirements / caveats (Trivy SARIF):**
